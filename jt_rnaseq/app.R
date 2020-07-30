@@ -55,7 +55,8 @@ ui <- fluidPage(navbarPage(
                     value = 1
                 )
             ),
-            mainPanel(plotOutput("volcano"))
+            mainPanel(plotOutput("volcano"),
+                      tableOutput("volcanotable"))
         )),
         ## MA plot
         tabPanel("MA plot", sidebarLayout(
@@ -138,6 +139,23 @@ server <- function(input, output) {
             geom_hline(yintercept = -log10(input$volcanopadj), lty = 2) +
             xlim(input$volcanoxlim) +
             ylim(input$volcanoylim)
+    })
+    
+    output$volcanotable <- renderTable({
+        data <- switch(input$volcanodataset,
+                       "Whole animal" = m_vs_c_res,
+                       "Fat body" = mut_vs_het_res)
+        
+        data <- data %>%
+            mutate(significance = case_when(
+                log2FoldChange <= -input$volcanofc & 
+                    padj < input$volcanopadj ~ "downregulated",
+                log2FoldChange >= input$volcanofc & 
+                    padj < input$volcanopadj ~ "upregulated",
+                TRUE ~ "not significant")
+            ) %>%
+            group_by(significance) %>%
+            count
     })
     
     output$maplot <- renderPlot({
