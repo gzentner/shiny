@@ -3,9 +3,12 @@ library(tidyverse)
 library(clusterProfiler)
 library(enrichplot)
 library(ggpubr)
+library(msigdbr)
+library(cowplot)
 
 m_vs_c_res <- read.delim("m_vs_c_full_results.tsv", sep = "\t")
-mut_vs_het_res <- read.delim("mut_vs_het_full_results.tsv", sep = "\t")
+mut_vs_het_res <-
+    read.delim("mut_vs_het_full_results.tsv", sep = "\t")
 
 # Define UI ----
 ui <- fluidPage(navbarPage(
@@ -23,16 +26,12 @@ ui <- fluidPage(navbarPage(
                                 "Fat body"),
                     selected = "Whole animal"
                 ),
-                numericInput(
-                    "volcano_padj",
-                    label = "Adjusted p-value threshold",
-                    value = 0.05
-                ),
-                numericInput(
-                    "volcano_fc",
-                    label = "log2(fold change) threshold",
-                    value = 1
-                ),
+                numericInput("volcano_padj",
+                             label = "Adjusted p-value threshold",
+                             value = 0.05),
+                numericInput("volcano_fc",
+                             label = "log2(fold change) threshold",
+                             value = 1),
                 sliderInput(
                     "volcano_pointsize",
                     label = "Point size",
@@ -45,14 +44,14 @@ ui <- fluidPage(navbarPage(
                     label = "X-axis limits",
                     min = -20,
                     max = 20,
-                    value = c(-20,20)
+                    value = c(-20, 20)
                 ),
                 sliderInput(
                     "volcano_ylim",
                     label = "X-axis limits",
                     min = 0,
                     max = 300,
-                    value = c(0,300)
+                    value = c(0, 300)
                 )
             ),
             mainPanel(plotOutput("volcano"),
@@ -68,16 +67,12 @@ ui <- fluidPage(navbarPage(
                                 "Fat body"),
                     selected = "Whole animal"
                 ),
-                numericInput(
-                    "ma_padj",
-                    label = "Adjusted p-value threshold",
-                    value = 0.05
-                ),
-                numericInput(
-                    "ma_fc",
-                    label = "log2(fold change) threshold",
-                    value = 1
-                ),
+                numericInput("ma_padj",
+                             label = "Adjusted p-value threshold",
+                             value = 0.05),
+                numericInput("ma_fc",
+                             label = "log2(fold change) threshold",
+                             value = 1),
                 sliderInput(
                     "ma_pointsize",
                     label = "Point size",
@@ -90,14 +85,14 @@ ui <- fluidPage(navbarPage(
                     label = "X-axis limits",
                     min = 0,
                     max = 20,
-                    value = c(0,20)
+                    value = c(0, 20)
                 ),
                 sliderInput(
                     "ma_ylim",
                     label = "X-axis limits",
                     min = -20,
                     max = 20,
-                    value = c(-20,20)
+                    value = c(-20, 20)
                 )
             ),
             mainPanel(plotOutput("maplot"))
@@ -120,81 +115,149 @@ ui <- fluidPage(navbarPage(
     ## GO page
     tabPanel("Functional enrichment", tabsetPanel(
         ## GO Biological Processes
-        tabPanel("GO BP", sidebarLayout(sidebarPanel(
+        tabPanel("GO Biological Process", sidebarLayout(sidebarPanel(
             selectInput(
-                "dataset",
+                "go_bp_dataset",
                 label = "Experiment",
                 choices = c("Whole animal",
                             "Fat body"),
                 selected = "Whole animal"
-            )
+            ),
+            numericInput("go_bp_padj",
+                         label = "Adjusted p-value threshold",
+                         value = 0.05),
+            numericInput("go_bp_fc",
+                         label = "log2(fold change) threshold",
+                         value = 1),
+            numericInput("go_bp_ncat",
+                         label = "Number of ontologies to display",
+                         value = 10),
+            selectInput("go_bp_plottype",
+                        label = "Plot type",
+                        choices = c("Dot plot",
+                                    "Bar plot"),
+                        selected = "Dot plot"
+                )
         ),
-        mainPanel())),
+        mainPanel(plotOutput("go_bp_up"),
+                  plotOutput("go_bp_down"))
+        )),
         ## Reactome pathways
         tabPanel("Reactome pathways", sidebarLayout(sidebarPanel(
             selectInput(
-                "dataset",
+                "reactome_dataset",
                 label = "Experiment",
                 choices = c("Whole animal",
                             "Fat body"),
                 selected = "Whole animal"
+            ),
+            numericInput("reactome_padj",
+                         label = "Adjusted p-value threshold",
+                         value = 0.05),
+            numericInput("reactome_fc",
+                         label = "log2(fold change) threshold",
+                         value = 1),
+            numericInput("reactome_ncat",
+                         label = "Number of ontologies to display",
+                         value = 10),
+            selectInput("reactome_plottype",
+                        label = "Plot type",
+                        choices = c("Dot plot",
+                                    "Bar plot"),
+                        selected = "Dot plot"
             )
         ),
-        mainPanel()))
+        mainPanel(plotOutput("reactome_up"),
+                  plotOutput("reactome_down"))
+        
+        )),
+        ## KEGG pathways
+        tabPanel("KEGG pathways", sidebarLayout(sidebarPanel(
+            selectInput(
+                "kegg_dataset",
+                label = "Experiment",
+                choices = c("Whole animal",
+                            "Fat body"),
+                selected = "Whole animal"
+            ),
+            numericInput("kegg_padj",
+                         label = "Adjusted p-value threshold",
+                         value = 0.05),
+            numericInput("kegg_fc",
+                         label = "log2(fold change) threshold",
+                         value = 1),
+            numericInput("kegg_ncat",
+                         label = "Number of ontologies to display",
+                         value = 10),
+            selectInput("kegg_plottype",
+                        label = "Plot type",
+                        choices = c("Dot plot",
+                                    "Bar plot"),
+                        selected = "Dot plot"
+            )
+        ),
+        mainPanel(plotOutput("kegg_up"),
+                  plotOutput("kegg_down"))
+        
+        ))
     ))
 ))
-
-
-
-
-
 
 # Define server logic ----
 server <- function(input, output) {
     
+    ## Volcano plot function
     output$volcano <- renderPlot({
         data <- switch(input$volcano_dataset,
                        "Whole animal" = m_vs_c_res,
                        "Fat body" = mut_vs_het_res)
         
         data <- data %>%
-            mutate(significance = case_when(
-                   log2FoldChange <= -input$volcano_fc & 
-                       padj < input$volcano_padj ~ "downregulated",
-                   log2FoldChange >= input$volcano_fc & 
-                       padj < input$volcano_padj ~ "upregulated",
-                   TRUE ~ "not significant")
-                   )
+            mutate(
+                significance = case_when(
+                    log2FoldChange <= -input$volcano_fc &
+                        padj < input$volcano_padj ~ "downregulated",
+                    log2FoldChange >= input$volcano_fc &
+                        padj < input$volcano_padj ~ "upregulated",
+                    TRUE ~ "not significant"
+                )
+            )
         
-        ggplot(data, aes(log2FoldChange,-log10(padj))) +
+        ggplot(data, aes(log2FoldChange, -log10(padj))) +
             theme_bw() +
             theme(panel.grid = element_blank()) +
             geom_point(aes(color = significance), size = input$volcano_pointsize) +
             scale_color_manual(values = c("blue", "gray", "magenta")) +
-            geom_vline(xintercept = -input$volcano_fc, lty = 2) +
+            geom_vline(xintercept = -input$volcano_fc,
+                       lty = 2) +
             geom_vline(xintercept = input$volcano_fc, lty = 2) +
-            geom_hline(yintercept = -log10(input$volcano_padj), lty = 2) +
+            geom_hline(yintercept = -log10(input$volcano_padj),
+                       lty = 2) +
             xlim(input$volcano_xlim) +
             ylim(input$volcano_ylim)
     })
     
+    ## Volcano plot table function
     output$volcanotable <- renderTable({
         data <- switch(input$volcano_dataset,
                        "Whole animal" = m_vs_c_res,
                        "Fat body" = mut_vs_het_res)
         
         data <- data %>%
-            mutate(significance = case_when(
-                log2FoldChange <= -input$volcano_fc & 
-                    padj < input$volcano_padj ~ "downregulated",
-                log2FoldChange >= input$volcano_fc & 
-                    padj < input$volcano_padj ~ "upregulated",
-                TRUE ~ "not significant")
+            mutate(
+                significance = case_when(
+                    log2FoldChange <= -input$volcano_fc &
+                        padj < input$volcano_padj ~ "downregulated",
+                    log2FoldChange >= input$volcano_fc &
+                        padj < input$volcano_padj ~ "upregulated",
+                    TRUE ~ "not significant"
+                )
             ) %>%
             group_by(significance) %>%
             count
     })
     
+    ## MA plot function
     output$maplot <- renderPlot({
         data <- switch(input$ma_dataset,
                        "Whole animal" = m_vs_c_res,
@@ -203,7 +266,7 @@ server <- function(input, output) {
         ggmaplot(
             data,
             fdr = input$ma_padj,
-            fc = 2^input$ma_fc,
+            fc = 2 ^ input$ma_fc,
             size = input$ma_pointsize,
             genenames = as.vector(data$geneid),
             top = 10,
@@ -219,12 +282,272 @@ server <- function(input, output) {
         )
     })
     
+    ## Expression table function
     output$deg_table <- renderDataTable({
         data <- switch(input$table_dataset,
                        "Whole animal" = m_vs_c_res,
                        "Fat body" = mut_vs_het_res) %>%
             select(-change)
     })
+    
+    ## GO BP upregulated function
+    output$go_bp_up <- renderPlot({
+        data <- switch(input$go_bp_dataset,
+                       "Whole animal" = m_vs_c_res,
+                       "Fat body" = mut_vs_het_res)
+        
+        data <- data %>%
+            mutate(
+                significance = case_when(
+                    log2FoldChange <= -input$go_bp_fc &
+                        padj < input$go_bp_padj ~ "downregulated",
+                    log2FoldChange >= input$go_bp_fc &
+                        padj < input$go_bp_padj ~ "upregulated",
+                    TRUE ~ "not significant"
+                )
+            )
+        
+        plot_type <- switch(input$go_bp_plottype,
+                            "Dot plot" = dotplot,
+                            "Bar plot" = barplot)
+        
+        plot_color <- switch(input$go_bp_plottype,
+                             "Dot plot" = scale_color_viridis_c(),
+                             "Bar plot" = scale_fill_viridis_c())
+        
+        msig_df = msigdbr(species = "Drosophila melanogaster", 
+                          category = "C5",
+                          subcategory = "BP")
+        
+        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
+        
+        upregulated <- filter(data, significance == "upregulated") %>%
+            pull(geneid)
+        
+        upregulated_go_bp <- enricher(upregulated, TERM2GENE = t2g)
+        
+        plot_type(upregulated_go_bp, 
+                showCategory = input$go_bp_ncat,
+                size = input$go_bp_dotsize,
+                title = "Upregulated") + 
+            plot_color
+        })
+    
+    ## GO BP downregulated function
+    output$go_bp_down <- renderPlot({
+        data <- switch(input$go_bp_dataset,
+                       "Whole animal" = m_vs_c_res,
+                       "Fat body" = mut_vs_het_res)
+        
+        data <- data %>%
+            mutate(
+                significance = case_when(
+                    log2FoldChange <= -input$go_bp_fc &
+                        padj < input$go_bp_padj ~ "downregulated",
+                    log2FoldChange >= input$go_bp_fc &
+                        padj < input$go_bp_padj ~ "upregulated",
+                    TRUE ~ "not significant"
+                )
+            )
+        
+        plot_type <- switch(input$go_bp_plottype,
+                            "Dot plot" = dotplot,
+                            "Bar plot" = barplot)
+        
+        plot_color <- switch(input$go_bp_plottype,
+                             "Dot plot" = scale_color_viridis_c(),
+                             "Bar plot" = scale_fill_viridis_c())
+        
+        msig_df = msigdbr(species = "Drosophila melanogaster", 
+                          category = "C5",
+                          subcategory = "BP")
+        
+        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
+        
+        downregulated <- filter(data, significance == "downregulated") %>%
+            pull(geneid)
+        
+        downregulated_go_bp <- enricher(downregulated, TERM2GENE = t2g)
+        
+        plot_type(downregulated_go_bp, 
+                showCategory = input$go_bp_ncat,
+                size = input$go_bp_dotsize,
+                title = "Downregulated") + 
+            plot_color
+    })
+    
+    ## Reactome upregulated function
+    output$reactome_up <- renderPlot({
+        data <- switch(input$reactome_dataset,
+                       "Whole animal" = m_vs_c_res,
+                       "Fat body" = mut_vs_het_res)
+        
+        data <- data %>%
+            mutate(
+                significance = case_when(
+                    log2FoldChange <= -input$reactome_fc &
+                        padj < input$reactome_padj ~ "downregulated",
+                    log2FoldChange >= input$reactome_fc &
+                        padj < input$reactome_padj ~ "upregulated",
+                    TRUE ~ "not significant"
+                )
+            )
+        
+        plot_type <- switch(input$reactome_plottype,
+                            "Dot plot" = dotplot,
+                            "Bar plot" = barplot)
+        
+        plot_color <- switch(input$reactome_plottype,
+                             "Dot plot" = scale_color_viridis_c(),
+                             "Bar plot" = scale_fill_viridis_c())
+        
+        msig_df = msigdbr(species = "Drosophila melanogaster", 
+                          category = "C2",
+                          subcategory = "CP:REACTOME")
+        
+        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
+        
+        upregulated <- filter(data, significance == "upregulated") %>%
+            pull(geneid)
+        
+        upregulated_reactome <- enricher(upregulated, TERM2GENE = t2g)
+        
+        plot_type(upregulated_reactome, 
+                  showCategory = input$reactome_ncat,
+                  size = input$reactome_dotsize,
+                  title = "Upregulated") + 
+            plot_color
+    })
+    
+    ## Reactome downregulated function
+    output$reactome_down <- renderPlot({
+        data <- switch(input$reactome_dataset,
+                       "Whole animal" = m_vs_c_res,
+                       "Fat body" = mut_vs_het_res)
+        
+        data <- data %>%
+            mutate(
+                significance = case_when(
+                    log2FoldChange <= -input$reactome_fc &
+                        padj < input$reactome_padj ~ "downregulated",
+                    log2FoldChange >= input$reactome_fc &
+                        padj < input$reactome_padj ~ "upregulated",
+                    TRUE ~ "not significant"
+                )
+            )
+        
+        plot_type <- switch(input$reactome_plottype,
+                            "Dot plot" = dotplot,
+                            "Bar plot" = barplot)
+        
+        plot_color <- switch(input$reactome_plottype,
+                             "Dot plot" = scale_color_viridis_c(),
+                             "Bar plot" = scale_fill_viridis_c())
+        
+        msig_df = msigdbr(species = "Drosophila melanogaster", 
+                          category = "C2",
+                          subcategory = "CP:REACTOME")
+        
+        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
+        
+        downregulated <- filter(data, significance == "downregulated") %>%
+            pull(geneid)
+        
+        downregulated_reactome <- enricher(downregulated, TERM2GENE = t2g)
+        
+        plot_type(downregulated_reactome, 
+                  showCategory = input$reactome_ncat,
+                  size = input$reactome_dotsize,
+                  title = "Downregulated") + 
+            plot_color
+    })
+    
+    ## KEGG pathways upregulated function
+    output$kegg_up <- renderPlot({
+        data <- switch(input$kegg_dataset,
+                       "Whole animal" = m_vs_c_res,
+                       "Fat body" = mut_vs_het_res)
+        
+        data <- data %>%
+            mutate(
+                significance = case_when(
+                    log2FoldChange <= -input$kegg_fc &
+                        padj < input$kegg_padj ~ "downregulated",
+                    log2FoldChange >= input$kegg_fc &
+                        padj < input$kegg_padj ~ "upregulated",
+                    TRUE ~ "not significant"
+                )
+            )
+        
+        plot_type <- switch(input$kegg_plottype,
+                            "Dot plot" = dotplot,
+                            "Bar plot" = barplot)
+        
+        plot_color <- switch(input$kegg_plottype,
+                             "Dot plot" = scale_color_viridis_c(),
+                             "Bar plot" = scale_fill_viridis_c())
+        
+        msig_df = msigdbr(species = "Drosophila melanogaster", 
+                          category = "C2",
+                          subcategory = "CP:KEGG")
+        
+        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
+        
+        upregulated <- filter(data, significance == "upregulated") %>%
+            pull(geneid)
+        
+        upregulated_kegg <- enricher(upregulated, TERM2GENE = t2g)
+        
+        plot_type(upregulated_kegg, 
+                  showCategory = input$kegg_ncat,
+                  size = input$kegg_dotsize,
+                  title = "Upregulated") + 
+            plot_color
+    })
+    
+    ## KEGG pathways downregulated function
+    output$kegg_down <- renderPlot({
+        data <- switch(input$kegg_dataset,
+                       "Whole animal" = m_vs_c_res,
+                       "Fat body" = mut_vs_het_res)
+        
+        data <- data %>%
+            mutate(
+                significance = case_when(
+                    log2FoldChange <= -input$kegg_fc &
+                        padj < input$kegg_padj ~ "downregulated",
+                    log2FoldChange >= input$kegg_fc &
+                        padj < input$kegg_padj ~ "upregulated",
+                    TRUE ~ "not significant"
+                )
+            )
+        
+        plot_type <- switch(input$kegg_plottype,
+                            "Dot plot" = dotplot,
+                            "Bar plot" = barplot)
+        
+        plot_color <- switch(input$kegg_plottype,
+                             "Dot plot" = scale_color_viridis_c(),
+                             "Bar plot" = scale_fill_viridis_c())
+        
+        msig_df = msigdbr(species = "Drosophila melanogaster", 
+                          category = "C2",
+                          subcategory = "CP:KEGG")
+        
+        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
+        
+        downregulated <- filter(data, significance == "downregulated") %>%
+            pull(geneid)
+        
+        downregulated_kegg <- enricher(downregulated, TERM2GENE = t2g)
+        
+        plot_type(downregulated_kegg, 
+                  showCategory = input$kegg_ncat,
+                  size = input$kegg_dotsize,
+                  title = "Downregulated") + 
+            plot_color
+    })
+    
 }
 
 
