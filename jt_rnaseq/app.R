@@ -1,17 +1,21 @@
 library(shiny)
+library(shinythemes)
 library(tidyverse)
 library(clusterProfiler)
 library(enrichplot)
 library(ggpubr)
 library(msigdbr)
-library(cowplot)
+library(BiocManager)
+
+options(repos = BiocManager::repositories())
+getOption("repos")
 
 m_vs_c_res <- read.delim("m_vs_c_full_results.tsv", sep = "\t")
-mut_vs_het_res <-
-    read.delim("mut_vs_het_full_results.tsv", sep = "\t")
+mut_vs_het_res <- read.delim("mut_vs_het_full_results.tsv", sep = "\t")
 
 # Define UI ----
-ui <- fluidPage(navbarPage(
+ui <- fluidPage(theme = shinytheme("cerulean"),
+    navbarPage(
     title = "ERR RNA-seq",
     
     ## Expression page
@@ -48,7 +52,7 @@ ui <- fluidPage(navbarPage(
                 ),
                 sliderInput(
                     "volcano_ylim",
-                    label = "X-axis limits",
+                    label = "Y-axis limits",
                     min = 0,
                     max = 300,
                     value = c(0, 300)
@@ -89,7 +93,7 @@ ui <- fluidPage(navbarPage(
                 ),
                 sliderInput(
                     "ma_ylim",
-                    label = "X-axis limits",
+                    label = "Y-axis limits",
                     min = -20,
                     max = 20,
                     value = c(-20, 20)
@@ -136,8 +140,12 @@ ui <- fluidPage(navbarPage(
                         label = "Plot type",
                         choices = c("Dot plot",
                                     "Bar plot"),
-                        selected = "Dot plot"
-                )
+                        selected = "Dot plot"),
+            selectInput("go_bp_x",
+                        label = "X-axis value",
+                        choices = c("Count",
+                                    "GeneRatio"),
+                        selected = "Count")
         ),
         mainPanel(plotOutput("go_bp_up"),
                   plotOutput("go_bp_down"))
@@ -164,8 +172,12 @@ ui <- fluidPage(navbarPage(
                         label = "Plot type",
                         choices = c("Dot plot",
                                     "Bar plot"),
-                        selected = "Dot plot"
-            )
+                        selected = "Dot plot"),
+            selectInput("reactome_x",
+                        label = "X-axis value",
+                        choices = c("Count",
+                                    "GeneRatio"),
+                        selected = "Count")
         ),
         mainPanel(plotOutput("reactome_up"),
                   plotOutput("reactome_down"))
@@ -193,8 +205,12 @@ ui <- fluidPage(navbarPage(
                         label = "Plot type",
                         choices = c("Dot plot",
                                     "Bar plot"),
-                        selected = "Dot plot"
-            )
+                        selected = "Dot plot"),
+            selectInput("kegg_x",
+                        label = "X-axis value",
+                        choices = c("Count",
+                                    "GeneRatio"),
+                        selected = "Count")
         ),
         mainPanel(plotOutput("kegg_up"),
                   plotOutput("kegg_down"))
@@ -226,7 +242,8 @@ server <- function(input, output) {
         ggplot(data, aes(log2FoldChange, -log10(padj))) +
             theme_bw() +
             theme(panel.grid = element_blank()) +
-            geom_point(aes(color = significance), size = input$volcano_pointsize) +
+            geom_point(aes(color = significance), 
+                       size = input$volcano_pointsize) +
             scale_color_manual(values = c("blue", "gray", "magenta")) +
             geom_vline(xintercept = -input$volcano_fc,
                        lty = 2) +
@@ -309,7 +326,7 @@ server <- function(input, output) {
         
         plot_type <- switch(input$go_bp_plottype,
                             "Dot plot" = dotplot,
-                            "Bar plot" = barplot)
+                            "Bar plot" = enrichplot::barplot)
         
         plot_color <- switch(input$go_bp_plottype,
                              "Dot plot" = scale_color_viridis_c(),
@@ -328,7 +345,7 @@ server <- function(input, output) {
         
         plot_type(upregulated_go_bp, 
                 showCategory = input$go_bp_ncat,
-                size = input$go_bp_dotsize,
+                x = input$go_bp_x,
                 title = "Upregulated") + 
             plot_color
         })
@@ -352,7 +369,7 @@ server <- function(input, output) {
         
         plot_type <- switch(input$go_bp_plottype,
                             "Dot plot" = dotplot,
-                            "Bar plot" = barplot)
+                            "Bar plot" = enrichplot::barplot)
         
         plot_color <- switch(input$go_bp_plottype,
                              "Dot plot" = scale_color_viridis_c(),
@@ -371,7 +388,7 @@ server <- function(input, output) {
         
         plot_type(downregulated_go_bp, 
                 showCategory = input$go_bp_ncat,
-                size = input$go_bp_dotsize,
+                x = input$go_bp_x,
                 title = "Downregulated") + 
             plot_color
     })
@@ -395,7 +412,7 @@ server <- function(input, output) {
         
         plot_type <- switch(input$reactome_plottype,
                             "Dot plot" = dotplot,
-                            "Bar plot" = barplot)
+                            "Bar plot" = enrichplot::barplot)
         
         plot_color <- switch(input$reactome_plottype,
                              "Dot plot" = scale_color_viridis_c(),
@@ -414,7 +431,7 @@ server <- function(input, output) {
         
         plot_type(upregulated_reactome, 
                   showCategory = input$reactome_ncat,
-                  size = input$reactome_dotsize,
+                  x = input$reactome_x,
                   title = "Upregulated") + 
             plot_color
     })
@@ -457,7 +474,7 @@ server <- function(input, output) {
         
         plot_type(downregulated_reactome, 
                   showCategory = input$reactome_ncat,
-                  size = input$reactome_dotsize,
+                  x = input$reactome_x,
                   title = "Downregulated") + 
             plot_color
     })
@@ -500,7 +517,7 @@ server <- function(input, output) {
         
         plot_type(upregulated_kegg, 
                   showCategory = input$kegg_ncat,
-                  size = input$kegg_dotsize,
+                  input$kegg_x,
                   title = "Upregulated") + 
             plot_color
     })
@@ -543,7 +560,7 @@ server <- function(input, output) {
         
         plot_type(downregulated_kegg, 
                   showCategory = input$kegg_ncat,
-                  size = input$kegg_dotsize,
+                  x = input$kegg_x,
                   title = "Downregulated") + 
             plot_color
     })
