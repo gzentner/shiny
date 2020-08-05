@@ -1,10 +1,12 @@
 library(shiny)
 library(shinythemes)
+library(shinyWidgets)
 library(tidyverse)
+library(org.Dm.eg.db)
 library(clusterProfiler)
+library(ReactomePA)
 library(enrichplot)
 library(ggpubr)
-library(msigdbr)
 library(BiocManager)
 
 options(repos = BiocManager::repositories())
@@ -118,103 +120,51 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
     
     ## GO page
     tabPanel("Functional enrichment", tabsetPanel(
-        ## GO Biological Processes
-        tabPanel("GO Biological Process", sidebarLayout(sidebarPanel(
-            selectInput(
-                "go_bp_dataset",
-                label = "Experiment",
-                choices = c("Whole animal",
-                            "Fat body"),
-                selected = "Whole animal"
-            ),
-            numericInput("go_bp_padj",
-                         label = "Adjusted p-value threshold",
-                         value = 0.05),
-            numericInput("go_bp_fc",
-                         label = "log2(fold change) threshold",
-                         value = 1),
-            numericInput("go_bp_ncat",
-                         label = "Number of ontologies to display",
-                         value = 10),
-            selectInput("go_bp_plottype",
-                        label = "Plot type",
-                        choices = c("Dot plot",
-                                    "Bar plot"),
-                        selected = "Dot plot"),
-            selectInput("go_bp_x",
-                        label = "X-axis value",
-                        choices = c("Count",
-                                    "GeneRatio"),
-                        selected = "Count")
-        ),
-        mainPanel(plotOutput("go_bp_up"),
-                  plotOutput("go_bp_down"))
-        )),
         ## Reactome pathways
         tabPanel("Reactome pathways", sidebarLayout(sidebarPanel(
+            dropdownButton(
+                tags$h3("Save plot"),
+                numericInput(inputId = "enrichpathway_width", 
+                             label = 'Width', value = 8),
+                numericInput(inputId = "enrichpathway_height", 
+                             label = 'Height', value = 12),
+                textInput(inputId = "enrichpathway_name",
+                          label = "File name",
+                          value = "reactome.png"),
+                downloadButton("reactome_download", "Download plot"),
+                icon = icon("save")
+            ),
             selectInput(
-                "reactome_dataset",
+                "enrichpathway_dataset",
                 label = "Experiment",
                 choices = c("Whole animal",
                             "Fat body"),
-                selected = "Whole animal"
-            ),
-            numericInput("reactome_padj",
+                selected = "Whole animal"),
+            radioButtons("enrichpathway_direction",
+                         label = "Direction of expression change",
+                         choices = c("Upregulated",
+                                     "Downregulated"),
+                         selected = "Upregulated"),
+            numericInput("enrichpathway_padj",
                          label = "Adjusted p-value threshold",
                          value = 0.05),
-            numericInput("reactome_fc",
+            numericInput("enrichpathway_fc",
                          label = "log2(fold change) threshold",
                          value = 1),
-            numericInput("reactome_ncat",
+            numericInput("enrichpathway_ncat",
                          label = "Number of ontologies to display",
                          value = 10),
-            selectInput("reactome_plottype",
+            selectInput("enrichpathway_plottype",
                         label = "Plot type",
                         choices = c("Dot plot",
                                     "Bar plot"),
                         selected = "Dot plot"),
-            selectInput("reactome_x",
+            selectInput("enrichpathway_x",
                         label = "X-axis value",
                         choices = c("Count",
                                     "GeneRatio"),
-                        selected = "Count")
-        ),
-        mainPanel(plotOutput("reactome_up"),
-                  plotOutput("reactome_down"))
-        
-        )),
-        ## KEGG pathways
-        tabPanel("KEGG pathways", sidebarLayout(sidebarPanel(
-            selectInput(
-                "kegg_dataset",
-                label = "Experiment",
-                choices = c("Whole animal",
-                            "Fat body"),
-                selected = "Whole animal"
-            ),
-            numericInput("kegg_padj",
-                         label = "Adjusted p-value threshold",
-                         value = 0.05),
-            numericInput("kegg_fc",
-                         label = "log2(fold change) threshold",
-                         value = 1),
-            numericInput("kegg_ncat",
-                         label = "Number of ontologies to display",
-                         value = 10),
-            selectInput("kegg_plottype",
-                        label = "Plot type",
-                        choices = c("Dot plot",
-                                    "Bar plot"),
-                        selected = "Dot plot"),
-            selectInput("kegg_x",
-                        label = "X-axis value",
-                        choices = c("Count",
-                                    "GeneRatio"),
-                        selected = "Count")
-        ),
-        mainPanel(plotOutput("kegg_up"),
-                  plotOutput("kegg_down"))
-        
+                        selected = "Count")),
+        mainPanel(plotOutput("reactomepa"))
         ))
     ))
 ))
@@ -300,271 +250,77 @@ server <- function(input, output) {
     })
     
     ## Expression table function
-    output$deg_table <- renderDataTable({
+    output$deg_table <- DT::renderDataTable({
         data <- switch(input$table_dataset,
                        "Whole animal" = m_vs_c_res,
                        "Fat body" = mut_vs_het_res) %>%
-            select(-change)
-    })
+            dplyr:: select(-change)
+        },
+        extensions = "Buttons",
+        options = list(
+            order = list(list(2, "desc"), list(9, "asc")),
+            dom = "Bfrtpli",
+            buttons = c('copy', 'csv', 'excel', 'print')
+        )
+)
     
-    ## GO BP upregulated function
-    output$go_bp_up <- renderPlot({
-        data <- switch(input$go_bp_dataset,
+    ## ReactomePA function
+    reactome_func <- reactive({
+        data <- switch(input$enrichpathway_dataset,
                        "Whole animal" = m_vs_c_res,
                        "Fat body" = mut_vs_het_res)
         
         data <- data %>%
             mutate(
                 significance = case_when(
-                    log2FoldChange <= -input$go_bp_fc &
-                        padj < input$go_bp_padj ~ "downregulated",
-                    log2FoldChange >= input$go_bp_fc &
-                        padj < input$go_bp_padj ~ "upregulated",
+                    log2FoldChange <= -input$enrichpathway_fc &
+                        padj < input$enrichpathway_padj ~ "downregulated",
+                    log2FoldChange >= input$enrichpathway_fc &
+                        padj < input$enrichpathway_padj ~ "upregulated",
                     TRUE ~ "not significant"
                 )
             )
         
-        plot_type <- switch(input$go_bp_plottype,
-                            "Dot plot" = dotplot,
-                            "Bar plot" = enrichplot::barplot)
-        
-        plot_color <- switch(input$go_bp_plottype,
-                             "Dot plot" = scale_color_viridis_c(),
-                             "Bar plot" = scale_fill_viridis_c())
-        
-        msig_df = msigdbr(species = "Drosophila melanogaster", 
-                          category = "C5",
-                          subcategory = "BP")
-        
-        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
-        
-        upregulated <- filter(data, significance == "upregulated") %>%
-            pull(geneid)
-        
-        upregulated_go_bp <- enricher(upregulated, TERM2GENE = t2g)
-        
-        plot_type(upregulated_go_bp, 
-                showCategory = input$go_bp_ncat,
-                x = input$go_bp_x,
-                title = "Upregulated") + 
-            plot_color
-        })
-    
-    ## GO BP downregulated function
-    output$go_bp_down <- renderPlot({
-        data <- switch(input$go_bp_dataset,
-                       "Whole animal" = m_vs_c_res,
-                       "Fat body" = mut_vs_het_res)
-        
-        data <- data %>%
-            mutate(
-                significance = case_when(
-                    log2FoldChange <= -input$go_bp_fc &
-                        padj < input$go_bp_padj ~ "downregulated",
-                    log2FoldChange >= input$go_bp_fc &
-                        padj < input$go_bp_padj ~ "upregulated",
-                    TRUE ~ "not significant"
-                )
-            )
-        
-        plot_type <- switch(input$go_bp_plottype,
-                            "Dot plot" = dotplot,
-                            "Bar plot" = enrichplot::barplot)
-        
-        plot_color <- switch(input$go_bp_plottype,
-                             "Dot plot" = scale_color_viridis_c(),
-                             "Bar plot" = scale_fill_viridis_c())
-        
-        msig_df = msigdbr(species = "Drosophila melanogaster", 
-                          category = "C5",
-                          subcategory = "BP")
-        
-        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
-        
-        downregulated <- filter(data, significance == "downregulated") %>%
-            pull(geneid)
-        
-        downregulated_go_bp <- enricher(downregulated, TERM2GENE = t2g)
-        
-        plot_type(downregulated_go_bp, 
-                showCategory = input$go_bp_ncat,
-                x = input$go_bp_x,
-                title = "Downregulated") + 
-            plot_color
-    })
-    
-    ## Reactome upregulated function
-    output$reactome_up <- renderPlot({
-        data <- switch(input$reactome_dataset,
-                       "Whole animal" = m_vs_c_res,
-                       "Fat body" = mut_vs_het_res)
-        
-        data <- data %>%
-            mutate(
-                significance = case_when(
-                    log2FoldChange <= -input$reactome_fc &
-                        padj < input$reactome_padj ~ "downregulated",
-                    log2FoldChange >= input$reactome_fc &
-                        padj < input$reactome_padj ~ "upregulated",
-                    TRUE ~ "not significant"
-                )
-            )
-        
-        plot_type <- switch(input$reactome_plottype,
-                            "Dot plot" = dotplot,
-                            "Bar plot" = enrichplot::barplot)
-        
-        plot_color <- switch(input$reactome_plottype,
-                             "Dot plot" = scale_color_viridis_c(),
-                             "Bar plot" = scale_fill_viridis_c())
-        
-        msig_df = msigdbr(species = "Drosophila melanogaster", 
-                          category = "C2",
-                          subcategory = "CP:REACTOME")
-        
-        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
-        
-        upregulated <- filter(data, significance == "upregulated") %>%
-            pull(geneid)
-        
-        upregulated_reactome <- enricher(upregulated, TERM2GENE = t2g)
-        
-        plot_type(upregulated_reactome, 
-                  showCategory = input$reactome_ncat,
-                  x = input$reactome_x,
-                  title = "Upregulated") + 
-            plot_color
-    })
-    
-    ## Reactome downregulated function
-    output$reactome_down <- renderPlot({
-        data <- switch(input$reactome_dataset,
-                       "Whole animal" = m_vs_c_res,
-                       "Fat body" = mut_vs_het_res)
-        
-        data <- data %>%
-            mutate(
-                significance = case_when(
-                    log2FoldChange <= -input$reactome_fc &
-                        padj < input$reactome_padj ~ "downregulated",
-                    log2FoldChange >= input$reactome_fc &
-                        padj < input$reactome_padj ~ "upregulated",
-                    TRUE ~ "not significant"
-                )
-            )
-        
-        plot_type <- switch(input$reactome_plottype,
+        plot_type <- switch(input$enrichpathway_plottype,
                             "Dot plot" = dotplot,
                             "Bar plot" = barplot)
         
-        plot_color <- switch(input$reactome_plottype,
+        plot_color <- switch(input$enrichpathway_plottype,
                              "Dot plot" = scale_color_viridis_c(),
                              "Bar plot" = scale_fill_viridis_c())
-        
-        msig_df = msigdbr(species = "Drosophila melanogaster", 
-                          category = "C2",
-                          subcategory = "CP:REACTOME")
-        
-        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
         
         downregulated <- filter(data, significance == "downregulated") %>%
-            pull(geneid)
-        
-        downregulated_reactome <- enricher(downregulated, TERM2GENE = t2g)
-        
-        plot_type(downregulated_reactome, 
-                  showCategory = input$reactome_ncat,
-                  x = input$reactome_x,
-                  title = "Downregulated") + 
-            plot_color
-    })
-    
-    ## KEGG pathways upregulated function
-    output$kegg_up <- renderPlot({
-        data <- switch(input$kegg_dataset,
-                       "Whole animal" = m_vs_c_res,
-                       "Fat body" = mut_vs_het_res)
-        
-        data <- data %>%
-            mutate(
-                significance = case_when(
-                    log2FoldChange <= -input$kegg_fc &
-                        padj < input$kegg_padj ~ "downregulated",
-                    log2FoldChange >= input$kegg_fc &
-                        padj < input$kegg_padj ~ "upregulated",
-                    TRUE ~ "not significant"
-                )
-            )
-        
-        plot_type <- switch(input$kegg_plottype,
-                            "Dot plot" = dotplot,
-                            "Bar plot" = barplot)
-        
-        plot_color <- switch(input$kegg_plottype,
-                             "Dot plot" = scale_color_viridis_c(),
-                             "Bar plot" = scale_fill_viridis_c())
-        
-        msig_df = msigdbr(species = "Drosophila melanogaster", 
-                          category = "C2",
-                          subcategory = "CP:KEGG")
-        
-        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
+            pull(geneid) %>%
+            bitr(., fromType = "SYMBOL", 
+                 toType = "ENTREZID", OrgDb = org.Dm.eg.db) %>%
+            pull(ENTREZID)
         
         upregulated <- filter(data, significance == "upregulated") %>%
-            pull(geneid)
+            pull(geneid) %>%
+            bitr(., fromType = "SYMBOL", 
+                 toType = "ENTREZID", OrgDb = org.Dm.eg.db) %>%
+            pull(ENTREZID)
         
-        upregulated_kegg <- enricher(upregulated, TERM2GENE = t2g)
+        data <- switch(input$enrichpathway_direction,
+                       "Upregulated" = upregulated,
+                       "Downregulated" = downregulated)
         
-        plot_type(upregulated_kegg, 
-                  showCategory = input$kegg_ncat,
-                  input$kegg_x,
-                  title = "Upregulated") + 
+        reactomepa <- enrichPathway(data, organism = "fly")
+        
+        plot_type(reactomepa, 
+                  showCategory = input$enrichpathway_ncat,
+                  input$enrichpathway_x) + 
             plot_color
     })
+        
+    output$reactomepa <- renderPlot({reactome_func()})
     
-    ## KEGG pathways downregulated function
-    output$kegg_down <- renderPlot({
-        data <- switch(input$kegg_dataset,
-                       "Whole animal" = m_vs_c_res,
-                       "Fat body" = mut_vs_het_res)
-        
-        data <- data %>%
-            mutate(
-                significance = case_when(
-                    log2FoldChange <= -input$kegg_fc &
-                        padj < input$kegg_padj ~ "downregulated",
-                    log2FoldChange >= input$kegg_fc &
-                        padj < input$kegg_padj ~ "upregulated",
-                    TRUE ~ "not significant"
-                )
-            )
-        
-        plot_type <- switch(input$kegg_plottype,
-                            "Dot plot" = dotplot,
-                            "Bar plot" = barplot)
-        
-        plot_color <- switch(input$kegg_plottype,
-                             "Dot plot" = scale_color_viridis_c(),
-                             "Bar plot" = scale_fill_viridis_c())
-        
-        msig_df = msigdbr(species = "Drosophila melanogaster", 
-                          category = "C2",
-                          subcategory = "CP:KEGG")
-        
-        t2g = msig_df %>% dplyr::select(gs_name, gene_symbol) %>% as.data.frame()
-        
-        downregulated <- filter(data, significance == "downregulated") %>%
-            pull(geneid)
-        
-        downregulated_kegg <- enricher(downregulated, TERM2GENE = t2g)
-        
-        plot_type(downregulated_kegg, 
-                  showCategory = input$kegg_ncat,
-                  x = input$kegg_x,
-                  title = "Downregulated") + 
-            plot_color
-    })
-    
+    output$reactome_download <- downloadHandler(
+        filename = function() {input$enrichpathway_name}, 
+        content = function(file) {ggsave(file, reactome_func(), 
+                                         width = input$enrichpathway_width,
+                                         height = input$enrichpathway_height)}
+    )
 }
 
 
