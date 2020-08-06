@@ -488,25 +488,7 @@ server <- function(input, output) {
         plot_type <- switch(input$reactome_plottype,
                             "Dot plot" = dotplot,
                             "Bar plot" = barplot)
-        
-        plot_pal <- reactive({switch(input$reactome_pal,
-                           "cividis" = "cividis",
-                           "inferno" = "inferno",
-                           "magma" = "magma",
-                           "viridis" = "viridis")})
-        
-        plot_color <- reactive({
-            if(input$reactome_plottype == "Dot plot")
-                return(noquote(paste0("scale_color_", plot_pal(), "_c()")))
-            else if(input$reactome_plottype == "Bar plot")
-                return(noquote(paste0("scale_fill_", plot_pal(), "_c()")))
-        })
             
-            
-            # switch(input$reactome_plottype,
-            #                  "Dot plot" = get(noquote(paste0("scale_color_", plot_pal, "_c()"))),
-            #                  "Bar plot" = get(noquote(paste0("scale_fill_", plot_pal, "_c()"))))
-        
         downregulated <- filter(data, significance == "downregulated") %>%
             pull(geneid) %>%
             bitr(., fromType = "SYMBOL", 
@@ -525,11 +507,30 @@ server <- function(input, output) {
         
         reactomepa <- enrichPathway(data, organism = "fly")
         
-        plot_type(reactomepa, 
+        p <- plot_type(reactomepa, 
                   showCategory = input$reactome_ncat,
-                  input$reactome_x) + 
-            plot_color()
-
+                  input$reactome_x)
+        
+        if(input$reactome_plottype == "Dot Plot" & input$reactome_pal == "cividis") {
+            p <- p + get("scale_color_viridis_c")(option = "cividis")
+        } else if(input$reactome_plottype == "Dot Plot" & input$reactome_pal == "inferno") {
+            p <- p + get("scale_color_viridis_c")(option = "inferno")
+        } else if(input$reactome_plottype == "Dot Plot" & input$reactome_pal == "magma") {
+            p <- p + get("scale_color_viridis_c")(option = "magma")
+        } else if(input$reactome_plottype == "Dot Plot" & input$reactome_pal == "viridis") {
+            p <- p + get("scale_color_viridis_c")(option = "viridis")
+        } else if(input$reactome_plottype == "Bar Plot" & input$reactome_pal == "cividis") {
+            p <- p + get("scale_fill_viridis_c")(option = "cividis")
+        } else if(input$reactome_plottype == "Bar Plot" & input$reactome_pal == "inferno") {
+            p <- p + get("scale_fill_viridis_c")(option = "inferno")
+        } else if(input$reactome_plottype == "Bar Plot" & input$reactome_pal == "magma") {
+            p <- p + get("scale_fill_viridis_c")(option = "magma")
+        } else if(input$reactome_plottype == "Bar Plot" & input$reactome_pal == "viridis") {
+            p <- p + get("scale_fill_viridis_c")(option = "viridis")
+        } 
+        
+        p
+        
     })
     
     output$reactomepa <- renderPlot({reactome_func()})
