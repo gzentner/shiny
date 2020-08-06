@@ -5,6 +5,6 @@ account: gzentner
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 2628393
-bundleId: 3456939
+bundleId: 3479775
 url: https://gzentner.shinyapps.io/jt_rnaseq/
-when: 1596154377.27088
+when: 1596661740.5643
