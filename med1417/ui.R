@@ -36,11 +36,11 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                                    colourInput(
                                      "volcano_up_col",
                                      label = "Upregulated color",
-                                     value = "seagreen"),
+                                     value = "magenta"),
                                    colourInput(
                                      "volcano_down_col",
                                      label = "Downregulated color",
-                                     value = "steelblue"),
+                                     value = "blue"),
                                    colourInput(
                                      "volcano_ns_col",
                                      label = "Unchanged color",
@@ -116,77 +116,104 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                       mainPanel(plotOutput("volcano"),
                                 tableOutput("volcanotable"))
                     )),
-                    ## Gene classification
-                    tabPanel("Gene classification", sidebarLayout(
+                    ## MA plot
+                    tabPanel("MA plot", sidebarLayout(
                       sidebarPanel(
                         fluidRow(
                           column(3,
                                  dropdownButton(
                                    tags$h4("Display options"),
                                    selectInput(
-                                     "geneclass_theme",
+                                     "ma_theme",
                                      label = "ggplot2 theme",
                                      choices = c("bw",
                                                  "classic",
                                                  "gray",
                                                  "minimal"),
                                      selected = "bw"),
-                                   selectInput(
-                                     "geneclass_pal",
-                                     label = "ggplot2 palette",
-                                     choices = c("cividis",
-                                                 "inferno",
-                                                 "magma",
-                                                 "plasma",
-                                                 "viridis"),
-                                     selected = "viridis"),
-                                   radioButtons("geneclass_grid",
+                                   colourInput(
+                                     "ma_up_col",
+                                     label = "Upregulated color",
+                                     value = "magenta"),
+                                   colourInput(
+                                     "ma_down_col",
+                                     label = "Downregulated color",
+                                     value = "blue"),
+                                   colourInput(
+                                     "ma_ns_col",
+                                     label = "Unchanged color",
+                                     value = "gray"),
+                                   radioButtons("ma_grid",
                                                 label = "Show grid",
                                                 choices = c("Yes",
                                                             "No"),
                                                 selected = "No"),
                                    icon = icon("palette")
                                  )),
-                          column(9,
-
+                          column(9, 
+                                 
                                  dropdownButton(
                                    tags$h4("Save plot"),
-                                   numericInput(inputId = "geneclass_width",
+                                   numericInput(inputId = "ma_width", 
                                                 label = 'Width', value = 12),
-                                   numericInput(inputId = "geneclass_height",
+                                   numericInput(inputId = "ma_height", 
                                                 label = 'Height', value = 12),
-                                   textInput(inputId = "geneclass_name",
+                                   textInput(inputId = "ma_name",
                                              label = "File name",
-                                             value = "geneclass.pdf"),
-                                   downloadButton("geneclass_download", "Download plot"),
+                                             value = "maplot.pdf"),
+                                   downloadButton("ma_download", "Download plot"),
                                    icon = icon("save")
                                  ))),
                         selectInput(
-                          "geneset",
+                          "ma_dataset",
                           label = "Experiment",
-                          choices = c("All genes (total + nsRNA)",
-                                      "Coactivator-redundant/TFIID-dependent genes (nsRNA)",
-                                      "SAGA/TFIID-dominated genes (nsRNA)"),
-                          selected = "All genes (total + nsRNA)"
+                          choices = c("Med14-AID nsRNA",
+                                      "Med17-AID nsRNA",
+                                      "Med14/17-AID nsRNA",
+                                      "Sua7-AID nsRNA",
+                                      "Med14-AID total RNA",
+                                      "Med17-AID total RNA",
+                                      "Med14/17-AID total RNA",
+                                      "Sua7-AID total RNA"),
+                          selected = "Med14-AID nsRNA"
                         ),
+                        numericInput("ma_padj",
+                                     label = "Adjusted p-value threshold",
+                                     value = 0.05),
+                        numericInput("ma_fc",
+                                     label = "log2(fold change) threshold",
+                                     value = 1),
                         sliderInput(
-                          "geneclass_fontsize",
+                          "ma_fontsize",
                           label = "Font size",
                           min = 6,
                           max = 24,
                           value = 12
                         ),
                         sliderInput(
-                          "geneclass_ylim",
+                          "ma_pointsize",
+                          label = "Point size",
+                          min = 0.1,
+                          max = 2,
+                          value = 0.5
+                        ),
+                        sliderInput(
+                          "ma_xlim",
+                          label = "X-axis limits",
+                          min = 0,
+                          max = 20,
+                          value = c(0, 20)
+                        ),
+                        sliderInput(
+                          "ma_ylim",
                           label = "Y-axis limits",
-                          min = -10,
-                          max = 10,
-                          value = c(-10, 10)
+                          min = -20,
+                          max = 20,
+                          value = c(-20, 20)
                         )
                       ),
-                      mainPanel(plotOutput("geneclass_boxplot"))
+                      mainPanel(plotOutput("maplot"))
                     )),
-                    
                     ## Table
                     tabPanel("Table", sidebarLayout(
                       sidebarPanel(
@@ -202,17 +229,9 @@ ui <- fluidPage(theme = shinytheme("cerulean"),
                                       "Med14/17-AID total RNA",
                                       "Sua7-AID total RNA"),
                           selected = "Med14-AID nsRNA"
-                        ),
-                        fileInput(
-                          "table_file",
-                          label = NULL,
-                          multiple = F,
-                          accept = c(".tsv", ".csv"),
-                          buttonLabel = "Browse...",
-                          placeholder = "No file selected (use all genes)"
                         )
                       ),
-                      mainPanel(tableOutput("deg_table"))
+                      mainPanel(DT::dataTableOutput("deg_table"))
                     ))
                   ))
                     

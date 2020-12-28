@@ -1,0 +1,12 @@
+name: jt_rnaseq2
+title: jt_rnaseq
+username: gzentner
+account: gzentner
+server: connect.rstudio.iu.edu
+hostUrl: https://connect.rstudio.iu.edu/__api__
+appId: 35
+bundleId: 60
+url: https://connect.rstudio.iu.edu/content/35/
+when: 1597404942.29764
+asMultiple: FALSE
+asStatic: FALSE
